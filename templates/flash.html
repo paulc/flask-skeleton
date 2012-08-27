@@ -1,0 +1,16 @@
+{% macro messages(filter=None) %}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category,message in messages: %}
+        {% if not filter or category in filter %}
+          <div class="alert {{ 'alert-error' if category == 'error' }} 
+                          {{ 'alert-success' if category == 'success' }}
+                          {{ 'alert-info ' if category == 'info' }}">
+            <a class="close" data-dismiss="alert" href="#">&#xd7;</i></a>
+            {{ message }}
+          </div>
+        {% endif %}
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+{% endmacro %}

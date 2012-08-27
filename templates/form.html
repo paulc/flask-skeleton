@@ -1,0 +1,77 @@
+{% macro input(field) %}
+  <div class="control-group {{ 'error' if field.errors }}">
+    <label class="control-label" for="{{ field.id }}">
+      {{ field.label.text }}
+      {{ "*" if field.flags.required }}
+    </label>
+    <div class="controls">
+      {{ field }}
+      <span class="help-inline">
+        {{ "<br>".join(field.errors)|safe if field.errors else field.description }}
+      </span>
+    </div>
+  </div>
+{% endmacro %}
+
+{% macro radio(field,inline=False) %}
+  <div class="control-group {{ 'error' if field.errors }}">
+    {{ field.label(class_='control-label') }}
+    <div class="controls">
+      {% for option in field %}
+        <label class="radio {{ 'inline' if inline }}" for="{{ option.id }}">
+          {{ option }}
+          {{ option.label.text }}
+        </label>
+      {% endfor %}
+      <span class="help-inline">
+        {{ "<br>".join(field.errors)|safe if field.errors else field.description }}
+      </span>
+    </div>
+  </div>
+{% endmacro %}
+
+{% macro check(title,fields,help="",inline=False) %}
+  <div class="control-group }}">
+    <label class="control-label" for="{{ title.lower().replace(' ','_') }}">{{ title }}</label>
+    <div class="controls">
+      {% for check in fields %}
+        <label class="checkbox {{ 'inline' if inline }}" for="{{ check.id }}">
+          {{ check }}
+          {{ check.label.text }} 
+        </label>
+      {% endfor %}
+      {% if inline %}
+        <span class="help-inline">{{ help }}</span>
+      {% else %}
+        <p class="help-block">{{ help }}</p>
+      {% endif %}
+    </div>
+  </div>
+{% endmacro %}
+
+{% macro actions(submit="Submit",cancel=false) %}
+  <div class="form-actions">
+    <button type="submit" name="_submit" class="btn btn-primary">{{ submit }}</button>
+    {% if cancel %}
+      <button type="submit" name="_cancel" class="btn">Cancel</button>
+    {% endif %}
+  </div>
+{% endmacro %}
+
+{% macro quick(form,submit="Submit",cancel=false) %}
+<div class="row showgrid">
+<form class="form-horizontal well" method="POST">
+  {% for field in form %}
+    {% if field.type in ('HiddenField','CSRFTokenField') %}
+      {{ field }}
+    {% elif field.type == 'RadioField' %}
+      {{ radio(field) }}
+    {% else %}
+      {{ input(field) }}
+    {% endif %}
+  {% endfor %}
+  {{ actions(submit,cancel) }}
+</form>
+</div>
+{% endmacro %}
+

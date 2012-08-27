@@ -1,0 +1,19 @@
+{% extends "base.html" if not request.headers.get("X-Pjax") %}
+{% import "flash.html" as flash %}
+{% import "form.html" as form %}
+
+{% block content %}
+    <h3>{{ message or "Message" }}</h3>
+    {% if user.is_anonymous() %}
+        Not logged in
+        <a href="{{ url_for('login') }}">Login</a>
+    {% else %}
+        Hello {{ user.name }} ( {{ session._fresh }} )
+        <a href="{{ url_for('logout') }}">Logout</a>
+    {% endif %}
+{% endblock %}
+
+{% block messages %}
+  {{ flash.messages() }}
+{% endblock %}
+

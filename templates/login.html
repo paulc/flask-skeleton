@@ -1,0 +1,12 @@
+{% extends "base.html" if not request.headers.get("X-Pjax") %}
+{% import "flash.html" as flash %}
+{% import "form.html" as form %}
+
+{% block content %}
+  {{ form.quick(login_form,"Login") }}
+{% endblock %}
+
+{% block messages %}
+  {{ flash.messages() }}
+{% endblock %}
+
