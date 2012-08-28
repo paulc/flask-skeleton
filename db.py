@@ -15,14 +15,16 @@ TABLES = (
 
 db_params = urlparse(os.environ.get('HEROKU_POSTGRESQL_GOLD_URL','postgres://localhost/'))
 
-db = psycopg2.connect(database=db_params.path[1:],
-                      user=db_params.username,
-                      password=db_params.password,
-                      host=db_params.hostname,
-                      port=db_params.port)
+db_connection = psycopg2.connect(database=db_params.path[1:],
+                                 user=db_params.username,
+                                 password=db_params.password,
+                                 host=db_params.hostname,
+                                 port=db_params.port)
 
-db.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
-psycopg2.extras.register_hstore(db)
+db_connection.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+psycopg2.extras.register_hstore(db_connection)
+
+print ">>>",db_connection
 
 def query(sql,params):
     with cursor() as c:
@@ -45,7 +47,7 @@ class cursor(object):
     def __init__(self):
         pass
     def __enter__(self):
-        self.c = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        self.c = db_connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
         return self.c
     def __exit__(self,type,value,traceback):
         self.c.close()
@@ -68,15 +70,4 @@ def create_table(name,schema):
 def init_db(tables):
     for (name,schema) in tables:
         create_table(name,schema)
-
-if __name__ == '__main__':
-    import code
-    with cursor() as c:
-        def q(s):
-            c.execute(s)
-            try:
-                print "\n".join(map(str,c.fetchall()))
-            except psycopg2.ProgrammingError,e:
-                pass
-        code.interact(local=locals())
 

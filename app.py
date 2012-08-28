@@ -1,15 +1,17 @@
 
 import os,sys
-from functools import wraps
 from flask import Flask,current_app,abort,flash,g,redirect,request,render_template, \
                   session,url_for
-from flask.ext.wtf import Form,TextField,PasswordField,BooleanField,DateTimeField, \
-                          RadioField,SelectField,SelectMultipleField,TextAreaField, \
-                          HiddenField,ValidationError,Required,length
 from flask.ext.login import LoginManager,login_required,login_user,logout_user, \
-                            current_user,fresh_login_required,confirm_login,login_url
+                            fresh_login_required,confirm_login,current_user
+import psycopg2,psycopg2.extras
+from urlparse import urlparse
 
 import db
+from user import User
+from forms import LoginForm
+from admin import admin_required
+
 
 # Config
 DEBUG = os.environ.get('DEBUG',False)
@@ -26,54 +28,6 @@ login_manager.setup_app(app)
 login_manager.login_view = "login"
 login_manager.refresh_view = "refresh"
 login_manager.needs_refresh_message = u"Please re-authenticate to access this page"
-
-def admin_required(fn):
-    @wraps(fn)
-    def decorated_view(*args, **kwargs):
-        if not current_user.is_authenticated():
-            return current_app.login_manager.unauthorized()
-        if not current_user.is_admin():
-            flash("Admin login required for this page","error")
-            return redirect(login_url(login_manager.login_view,request.url))
-        return fn(*args, **kwargs)
-    return decorated_view
-
-class User(object):
-    def __init__(self,user):
-        self._user = user
-    def __getattr__(self,k):
-        try:
-            return self._user[k]
-        except KeyError:
-            raise AttributeError()
-    def get_id(self):
-        return unicode(self._user['id'])
-    def is_active(self):
-        return self.active
-    def is_anonymous(self):
-        return False
-    def is_authenticated(self):
-        return True
-    def is_admin(self):
-        return self.admin
-
-class LoginForm(Form):
-    user = TextField('Username', validators=[Required()])
-    password = PasswordField('Password', validators=[Required()])
-    def validate(self):
-        rv = Form.validate(self)
-        if not rv:
-            return False
-        user = db.row('users','name',self.user.data)
-        print user
-        if user is None:
-            self.user.errors.append('Unknown User')
-            return False
-        if self.password.data != user['password']:
-            self.password.errors.append('Invalid Password')
-            return False
-        self.user = User(user)
-        return True
 
 @login_manager.user_loader
 def load_user(userid):
