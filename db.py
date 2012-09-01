@@ -93,7 +93,7 @@ def update(table,values,where):
     with cursor() as c:
         c.execute(sql,values.values() + where.values())
 
-def check_table(t,c=None):
+def check_table(t):
     with cursor() as c:
         c.execute('SELECT tablename FROM pg_tables WHERE schemaname=%s and tablename=%s',
                                              ('public',t));
