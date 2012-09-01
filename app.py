@@ -31,7 +31,7 @@ login_manager.needs_refresh_message = u"Please re-authenticate to access this pa
 
 @login_manager.user_loader
 def load_user(userid):
-    user = db.row('users','id',int(userid))
+    user = db.select_one('users',{'id':int(userid)})
     return User(user) if user else None 
 
 def text(msg,code=200):

@@ -12,7 +12,7 @@ class LoginForm(Form):
         rv = Form.validate(self)
         if not rv:
             return False
-        user = db.row('users','name',self.user.data)
+        user = db.select_one('users',{'name':self.user.data})
         print user
         if user is None:
             self.user.errors.append('Unknown User')

@@ -9,7 +9,7 @@ TABLES = (
                    password TEXT NOT NULL,
                    active BOOLEAN NOT NULL DEFAULT true,
                    admin BOOLEAN NOT NULL DEFAULT false,
-                   properties HSTORE,
+                   properties HSTORE DEFAULT ''::hstore,
                    inserted TIMESTAMP NOT NULL DEFAULT NOW()'''),
 )
 
@@ -48,9 +48,9 @@ _operators = { 'lt':'<', 'gt':'>', 'in':'in', 'ne':'!=', 'like':'like' }
 def _where(where):
     if where: 
         _where = []
-        for f in where:
+        for f in where.keys():
             field,_,op = f.partition('__')
-            _where.append('%s %s %%s' % (field,_operators.get(op,'=')))
+            _where.append('%s %s %%(%s)s' % (field,_operators.get(op,op) or '=',f))
         return ' WHERE ' + ' AND '.join(_where)
     else:
         return ''
@@ -67,31 +67,37 @@ def _order(order):
 
 def select(table,where=None,order=None):
     sql = 'SELECT * FROM %s' % table + _where(where) + _order(order)
-    return query(sql,where.values() if where else None)
+    return query(sql,where)
         
 def select_one(table,where=None,order=None):
     sql = 'SELECT * FROM %s' % table + _where(where) + _order(order)
-    return query_one(sql,where.values() if where else None)
+    return query_one(sql,where)
         
 def insert(table,values):
-    sql = 'INSERT INTO %s (%s) VALUES (%s)' % (table,",".join(values.keys()),",".join(['%s']*len(values)))
+    _into = []
+    _values = []
+    for v in values.keys():
+        _into.append(v)
+        _values.append('%%(%s)s' % v)
+    sql = 'INSERT INTO %s (%s) VALUES (%s)' % (table,','.join(_into),','.join(_values))
     with cursor() as c:
-        c.execute(sql,values.values())
+        c.execute(sql,values)
+        return c.rowcount
 
-def delete(table,where):
+def delete(table,where=None):
     sql = 'DELETE FROM %s' % table + _where(where)
     with cursor() as c:
-        c.execute(sql,where.values())
+        c.execute(sql,where)
+        return c.rowcount
 
-def update(table,values,where):
-    sql = 'UPDATE %s SET ' % table
-    _set = []
-    for k,v in values.items():
-        _set.append('%s = %%s' % k)
-    sql += ",".join(_set)
-    sql += _where(where)
+def update(table,values,where=None):
+    sql = 'UPDATE %s SET %s' % (table,','.join(['%s = %%(%s)s' % (v,v) for v in values.keys()]))
     with cursor() as c:
-        c.execute(sql,values.values() + where.values())
+        sql = c.mogrify(sql,values)
+        if where:
+            sql += c.mogrify(_where(where),where)
+        c.execute(sql)
+        return c.rowcount
 
 def check_table(t):
     with cursor() as c:
