@@ -1,7 +1,6 @@
 
-import os,select,sys
+import os,urlparse
 import psycopg2,psycopg2.extras
-from urlparse import urlparse
 
 TABLES = (
     ('users',   '''id SERIAL PRIMARY KEY,
@@ -13,7 +12,7 @@ TABLES = (
                    inserted TIMESTAMP NOT NULL DEFAULT now()'''),
 )
 
-_params = urlparse(os.environ.get('HEROKU_POSTGRESQL_GOLD_URL','postgres://localhost/'))
+_params = urlparse.urlparse(os.environ.get('HEROKU_POSTGRESQL_GOLD_URL','postgres://localhost/'))
 
 _connection = psycopg2.connect(database=_params.path[1:],
                                user=_params.username,
