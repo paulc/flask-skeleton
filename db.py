@@ -9,8 +9,8 @@ TABLES = (
                    password TEXT NOT NULL,
                    active BOOLEAN NOT NULL DEFAULT true,
                    admin BOOLEAN NOT NULL DEFAULT false,
-                   properties HSTORE DEFAULT ''::hstore,
-                   inserted TIMESTAMP NOT NULL DEFAULT NOW()'''),
+                   properties HSTORE NOT NULL DEFAULT ''::hstore,
+                   inserted TIMESTAMP NOT NULL DEFAULT now()'''),
 )
 
 _params = urlparse(os.environ.get('HEROKU_POSTGRESQL_GOLD_URL','postgres://localhost/'))
