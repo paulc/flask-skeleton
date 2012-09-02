@@ -27,7 +27,7 @@ class cursor(object):
     def __init__(self):
         pass
     def __enter__(self):
-        self.c = _connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        self.c = _connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         return self.c
     def __exit__(self,type,value,traceback):
         self.c.close()
