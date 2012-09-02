@@ -72,6 +72,14 @@ def select_one(table,where=None,order=None):
     sql = 'SELECT * FROM %s' % table + _where(where) + _order(order)
     return query_one(sql,where)
         
+def join(tables,where=None,on=None):
+    if on:
+        _on = "%s = %s" % on
+    else:
+        _on = "%s.id = %s.%s_id" % (tables[0],tables[1],tables[0])
+    sql = 'select * from %s join %s on (%s)' % (tables[0],tables[1],_on) + _where(where) 
+    return query(sql,where)
+
 def insert(table,values):
     _into = []
     _values = []
