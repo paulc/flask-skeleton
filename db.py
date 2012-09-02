@@ -64,29 +64,37 @@ def _order(order):
     else:
         return ''
 
-def select(table,where=None,order=None):
-    sql = 'SELECT * FROM %s' % table + _where(where) + _order(order)
+def _columns(columns):
+    if columns:
+        return ",".join([(c if isinstance(c,(str,unicode)) else "%s AS %s" % c) for c in columns])
+    else:
+        return '*'
+
+def _on((t1,t2),on):
+    if on:
+        return "%s = %s" % on
+    else:
+        return "%s.id = %s.%s_id" % (t1,t2,t1)
+
+def select(table,where=None,order=None,columns=None):
+    sql = 'SELECT %s FROM %s' % (_columns(columns),table) + _where(where) + _order(order)
     return query(sql,where)
         
-def select_one(table,where=None,order=None):
-    sql = 'SELECT * FROM %s' % table + _where(where) + _order(order)
+def select_one(table,where=None,order=None,columns=None):
+    sql = 'SELECT %s FROM %s' % (_columns(columns),table) + _where(where) + _order(order)
     return query_one(sql,where)
         
-def join(tables,where=None,on=None):
-    if on:
-        _on = "%s = %s" % on
-    else:
-        _on = "%s.id = %s.%s_id" % (tables[0],tables[1],tables[0])
-    sql = 'select * from %s join %s on (%s)' % (tables[0],tables[1],_on) + _where(where) 
+def join((t1,t2),where=None,on=None,columns=None):
+    sql = 'select %s from %s join %s on (%s)' % (_columns(columns),t1,t2,_on((t1,t2),on)) + _where(where) 
     return query(sql,where)
 
+def join_one((t1,t2),where=None,on=None,columns=None):
+    sql = 'select %s from %s join %s on (%s)' % (_columns(columns),t1,t2,_on((t1,t2),on)) + _where(where) 
+    return query_one(sql,where)
+
 def insert(table,values):
-    _into = []
-    _values = []
-    for v in values.keys():
-        _into.append(v)
-        _values.append('%%(%s)s' % v)
-    sql = 'INSERT INTO %s (%s) VALUES (%s)' % (table,','.join(_into),','.join(_values))
+    _values = [ '%%(%s)s' % v for v in values.keys() ]
+    sql = 'INSERT INTO %s (%s) VALUES (%s)' % (table,','.join(values.keys()),','.join(_values))
     with cursor() as c:
         c.execute(sql,values)
         return c.rowcount
