@@ -76,20 +76,26 @@ def _on((t1,t2),on):
     else:
         return "%s.id = %s.%s_id" % (t1,t2,t1)
 
-def select(table,where=None,order=None,columns=None):
-    sql = 'SELECT %s FROM %s' % (_columns(columns),table) + _where(where) + _order(order)
+def _limit(limit):
+    if limit:
+        return ' LIMIT %d' % limit
+    else:
+        return ''
+
+def select(table,where=None,order=None,columns=None,limit=None):
+    sql = 'SELECT %s FROM %s' % (_columns(columns),table) + _where(where) + _order(order) + _limit(limit)
     return query(sql,where)
         
-def select_one(table,where=None,order=None,columns=None):
-    sql = 'SELECT %s FROM %s' % (_columns(columns),table) + _where(where) + _order(order)
+def select_one(table,where=None,order=None,columns=None,limit=None):
+    sql = 'SELECT %s FROM %s' % (_columns(columns),table) + _where(where) + _order(order) + _limit(limit)
     return query_one(sql,where)
         
-def join((t1,t2),where=None,on=None,columns=None):
-    sql = 'select %s from %s join %s on (%s)' % (_columns(columns),t1,t2,_on((t1,t2),on)) + _where(where) 
+def join((t1,t2),where=None,on=None,order=None,columns=None,limit=None):
+    sql = 'select %s from %s join %s on (%s)' % (_columns(columns),t1,t2,_on((t1,t2),on)) + _where(where) + _order(order) + _limit(limit)
     return query(sql,where)
 
-def join_one((t1,t2),where=None,on=None,columns=None):
-    sql = 'select %s from %s join %s on (%s)' % (_columns(columns),t1,t2,_on((t1,t2),on)) + _where(where) 
+def join_one((t1,t2),where=None,on=None,order=None,columns=None,limit=None):
+    sql = 'select %s from %s join %s on (%s)' % (_columns(columns),t1,t2,_on((t1,t2),on)) + _where(where) + _order(order) + _limit(limit)
     return query_one(sql,where)
 
 def insert(table,values):
