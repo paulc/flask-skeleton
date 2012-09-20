@@ -10,7 +10,7 @@ def _get_url():
     except IndexError:
         return 'postgres://localhost/'
 
-def connect(url=None):
+def connect(url=None,autocommit=True,hstore=True):
     global _connection
     if not _connection:
         params = urlparse.urlparse(url or _get_url())
@@ -20,8 +20,10 @@ def connect(url=None):
                                        host=params.hostname,
                                        port=params.port)
 
-        _connection.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
-        psycopg2.extras.register_hstore(_connection)
+        if autocommit:
+            _connection.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+        if hstore:
+            psycopg2.extras.register_hstore(_connection)
 
 class cursor(object):
     def __init__(self):
