@@ -12,7 +12,6 @@ from user import User
 from forms import LoginForm
 from admin import admin_required
 
-
 # Config
 DEBUG = os.environ.get('DEBUG',False)
 SECRET_KEY = os.urandom(32)
@@ -21,6 +20,21 @@ BOOTSTRAP_USE_CDN = False
 # Create App
 app = Flask(__name__)
 app.config.from_object(__name__)
+
+# Database connection
+TABLES = (
+    ('users',   '''id SERIAL PRIMARY KEY,
+                   name TEXT NOT NULL,
+                   password TEXT NOT NULL,
+                   active BOOLEAN NOT NULL DEFAULT true,
+                   admin BOOLEAN NOT NULL DEFAULT false,
+                   properties HSTORE NOT NULL DEFAULT ''::hstore,
+                   inserted TIMESTAMP NOT NULL DEFAULT now()'''),
+)
+
+DB_URL = None
+db.connect(DB_URL)
+db.init_db(TABLES)
 
 # Flask-Login
 login_manager = LoginManager()

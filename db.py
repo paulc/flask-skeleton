@@ -2,30 +2,31 @@
 import os,urlparse
 import psycopg2,psycopg2.extras
 
-TABLES = (
-    ('users',   '''id SERIAL PRIMARY KEY,
-                   name TEXT NOT NULL,
-                   password TEXT NOT NULL,
-                   active BOOLEAN NOT NULL DEFAULT true,
-                   admin BOOLEAN NOT NULL DEFAULT false,
-                   properties HSTORE NOT NULL DEFAULT ''::hstore,
-                   inserted TIMESTAMP NOT NULL DEFAULT now()'''),
-)
+_connection = None
 
-_params = urlparse.urlparse(os.environ.get('HEROKU_POSTGRESQL_GOLD_URL','postgres://localhost/'))
+def _get_url():
+    try:
+        return [ os.environ[k] for k in os.environ if k.startswith('HEROKU_POSTGRES') ][0]
+    except IndexError:
+        return 'postgres://localhost/'
 
-_connection = psycopg2.connect(database=_params.path[1:],
-                               user=_params.username,
-                               password=_params.password,
-                               host=_params.hostname,
-                               port=_params.port)
+def connect(url=None):
+    global _connection
+    if not _connection:
+        params = urlparse.urlparse(url or _get_url())
+        _connection = psycopg2.connect(database=params.path[1:],
+                                       user=params.username,
+                                       password=params.password,
+                                       host=params.hostname,
+                                       port=params.port)
 
-_connection.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
-psycopg2.extras.register_hstore(_connection)
+        _connection.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+        psycopg2.extras.register_hstore(_connection)
 
 class cursor(object):
     def __init__(self):
-        pass
+        if not _connection:
+            raise ValueError("No database connection")
     def __enter__(self):
         self.c = _connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         return self.c
@@ -89,6 +90,12 @@ def select(table,where=None,order=None,columns=None,limit=None):
 def select_one(table,where=None,order=None,columns=None,limit=None):
     sql = 'SELECT %s FROM %s' % (_columns(columns),table) + _where(where) + _order(order) + _limit(limit)
     return query_one(sql,where)
+
+def select_dict(table,key,where=None,order=None,columns=None,limit=None):
+    _d = {}
+    for row in select(table,where,order,columns,limit):
+        _d[row[key]] = row
+    return _d
         
 def join((t1,t2),where=None,on=None,order=None,columns=None,limit=None):
     sql = 'select %s from %s join %s on (%s)' % (_columns(columns),t1,t2,_on((t1,t2),on)) + _where(where) + _order(order) + _limit(limit)
@@ -138,4 +145,9 @@ def create_table(name,schema):
 def init_db(tables):
     for (name,schema) in tables:
         create_table(name,schema)
+
+if __name__ == '__main__':
+    import code
+    connect()
+    code.interact(local=locals())
 
