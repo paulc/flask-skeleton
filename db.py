@@ -98,14 +98,20 @@ def select_dict(table,key,where=None,order=None,columns=None,limit=None):
     for row in select(table,where,order,columns,limit):
         _d[row[key]] = row
     return _d
-        
-def join((t1,t2),where=None,on=None,order=None,columns=None,limit=None):
+
+def join(t1,t2,where=None,on=None,order=None,columns=None,limit=None):
     sql = 'select %s from %s join %s on (%s)' % (_columns(columns),t1,t2,_on((t1,t2),on)) + _where(where) + _order(order) + _limit(limit)
     return query(sql,where)
 
-def join_one((t1,t2),where=None,on=None,order=None,columns=None,limit=None):
+def join_one(t1,t2,where=None,on=None,order=None,columns=None,limit=None):
     sql = 'select %s from %s join %s on (%s)' % (_columns(columns),t1,t2,_on((t1,t2),on)) + _where(where) + _order(order) + _limit(limit)
     return query_one(sql,where)
+
+def join_dict(t1,t2,key,where=None,on=None,order=None,columns=None,limit=None):
+    _d = {}
+    for row in join(t1,t2,where,on,order,columns,limit):
+        _d[row[key]] = row
+    return _d
 
 def insert(table,values):
     _values = [ '%%(%s)s' % v for v in values.keys() ]
