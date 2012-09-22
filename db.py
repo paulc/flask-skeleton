@@ -1,8 +1,8 @@
 
 import os,urlparse
-import psycopg2,psycopg2.extras
+import psycopg2,psycopg2.extras,psycopg2.pool
 
-_connection = None
+_pool = None
 
 def _get_url():
     try:
@@ -10,30 +10,37 @@ def _get_url():
     except IndexError:
         return 'postgres://localhost/'
 
-def connect(url=None,autocommit=True,hstore=True):
-    global _connection
-    if not _connection:
+def connect(url=None,min=1,max=5):
+    global _pool
+    if not _pool:
         params = urlparse.urlparse(url or _get_url())
-        _connection = psycopg2.connect(database=params.path[1:],
-                                       user=params.username,
-                                       password=params.password,
-                                       host=params.hostname,
-                                       port=params.port)
-
-        if autocommit:
-            _connection.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
-        if hstore:
-            psycopg2.extras.register_hstore(_connection)
-
+        _pool = psycopg2.pool.ThreadedConnectionPool(min,max,
+                                                     database=params.path[1:],
+                                                     user=params.username,
+                                                     password=params.password,
+                                                     host=params.hostname,
+                                                     port=params.port)
+    
 class cursor(object):
-    def __init__(self):
-        if not _connection:
-            raise ValueError("No database connection")
+    def __init__(self,hstore=True):
+        self.hstore = hstore
+        if not _pool:
+            raise ValueError("No database pool")
     def __enter__(self):
-        self.c = _connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        return self.c
+        self.connection = _pool.getconn()
+        if self.hstore:
+            psycopg2.extras.register_hstore(self.connection)
+        self.cursor = self.connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        return self.cursor
     def __exit__(self,type,value,traceback):
-        self.c.close()
+        self.connection.commit()
+        self.cursor.close()
+        _pool.putconn(self.connection)
+
+def execute(sql,params=None):
+    with cursor() as c:
+        c.execute(sql,params)
+        return c.rowcount
 
 def query(sql,params=None):
     with cursor() as c:
