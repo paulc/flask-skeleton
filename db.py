@@ -1,4 +1,22 @@
 
+"""
+    >>> connect('postgres://localhost/')
+    >>> tables = (('doctest_t1','''id SERIAL PRIMARY KEY,
+    ...                            name TEXT NOT NULL,
+    ...                            active BOOLEAN NOT NULL DEFAULT true,
+    ...                            properties HSTORE NOT NULL DEFAULT ''::hstore'''),
+    ...           ('doctest_t2','''id SERIAL PRIMARY KEY,
+    ...                            value TEXT NOT NULL,
+    ...                            doctest_t1_id INTEGER NOT NULL REFERENCES doctest_t1(id)'''),
+    ...          )
+    >>> for name,_ in tables:
+    ...     drop_table(name)
+    >>> init_db(tables)
+    >>> for i in range(10):
+    ...     _ = insert('doctest_t1',{'name':chr(97+i)*5,'properties':{'key':str(i)}})
+
+"""
+
 import os,urlparse
 import psycopg2,psycopg2.extras,psycopg2.pool
 
@@ -131,21 +149,33 @@ class cursor(object):
                                 + _where(where) + _order(order) + _limit(limit)
         return self.query_dict(sql,key,where)
 
-    def insert(self,table,values):
+    def insert(self,table,values,returning=None):
         _values = [ '%%(%s)s' % v for v in values.keys() ]
         sql = 'INSERT INTO %s (%s) VALUES (%s)' % (table,','.join(values.keys()),','.join(_values))
-        return self.execute(sql,values)
+        if returning:
+            sql += ' RETURNING %s' % returning
+            return self.query_one(sql,values)
+        else:
+            return self.execute(sql,values)
 
-    def delete(self,table,where=None):
+    def delete(self,table,where=None,returning=None):
         sql = 'DELETE FROM %s' % table + _where(where)
-        return self.execute(sql,where)
+        if returning:
+            sql += ' RETURNING %s' % returning
+            return self.query(sql,where)
+        else:
+            return self.execute(sql,where)
 
-    def update(self,table,values,where=None):
+    def update(self,table,values,where=None,returning=None):
         sql = 'UPDATE %s SET %s' % (table,','.join(['%s = %%(%s)s' % (v,v) for v in values.keys()]))
         sql = self.cursor.mogrify(sql,values)
         if where:
             sql += self.cursor.mogrify(_where(where),where)
-        return self.execute(sql)
+        if returning:
+            sql += ' RETURNING %s' % returning
+            return self.query(sql)
+        else:
+            return self.execute(sql)
 
 def execute(sql,params=None):
     with cursor() as c:
@@ -183,17 +213,17 @@ def join_dict(t1,t2,key,where=None,on=None,order=None,columns=None,limit=None):
     with cursor() as c:
         return c.join_dict(t1,t2,key,where,on,order,columns,limit)
 
-def insert(table,values):
+def insert(table,values,returning=None):
     with cursor() as c:
-        return c.insert(table,values)
+        return c.insert(table,values,returning)
 
-def delete(table,where=None):
+def delete(table,where=None,returning=None):
     with cursor() as c:
-        return c.delete(table,where)
+        return c.delete(table,where,returning)
 
-def update(table,values,where=None):
+def update(table,values,where=None,returning=None):
     with cursor() as c:
-        return c.update(table,values,where)
+        return c.update(table,values,where,returning)
 
 def check_table(t):
     with cursor() as c:
@@ -202,7 +232,7 @@ def check_table(t):
 
 def drop_table(t):
     with cursor() as c:
-        c.execute('DROP TABLE %s CASCADE' % t)
+        c.execute('DROP TABLE IF EXISTS %s CASCADE' % t)
 
 def create_table(name,schema):
     if not check_table(name):
@@ -214,7 +244,10 @@ def init_db(tables):
         create_table(name,schema)
 
 if __name__ == '__main__':
-    import code
-    connect()
-    code.interact(local=locals())
+    import code,doctest,sys
+    if sys.argv.count('--test'):
+        doctest.testmod(optionflags=doctest.ELLIPSIS)
+    else:
+        connect()
+        code.interact(local=locals())
 
