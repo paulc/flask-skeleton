@@ -1,0 +1,13 @@
+{% extends "base.html" if not request.headers.get("X-Pjax") %}
+{% import "flash.html" as flash %}
+{% import "form.html" as form %}
+{% import "table.html" as table %}
+
+{% block content %}
+  {{ table.table(columns,rows) }}
+{% endblock %}
+
+{% block messages %}
+  {{ flash.messages() }}
+{% endblock %}
+

@@ -1,0 +1,18 @@
+{% macro table(columns,rows) %}
+  <table class="table table-bordered table-hover">
+    <thead>
+      {% for column in columns %}
+        <th>{{ column|title }}</th>
+      {% endfor %}
+    </thead>
+    <tbody>
+      {% for row in rows %}
+        <tr>
+          {% for column in columns %}
+            <td>{{ row[column] }}</td>
+          {% endfor %}
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endmacro %}

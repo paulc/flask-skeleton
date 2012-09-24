@@ -15,7 +15,6 @@ from admin import admin_required
 # Config
 DEBUG = os.environ.get('DEBUG',False)
 SECRET_KEY = os.urandom(32)
-BOOTSTRAP_USE_CDN = False
 
 # Create App
 app = Flask(__name__)
@@ -64,6 +63,12 @@ def login():
         return redirect(request.args.get("next") or url_for("index"))
     return render_template('login.html',login_form=form)
 
+@app.route('/users')
+@login_required
+def users():
+    return render_template('users.html',rows=db.select('users',order=('id',)),
+                                        columns=('id','name','active','admin','properties'))
+
 @app.route('/logout')
 @login_required
 def logout():
@@ -94,9 +99,7 @@ def fresh():
 @app.route('/ping')
 @login_required
 def ping():
-    with db.cursor() as c:
-        c.execute('select version()')
-        return text(c.fetchone()['version'])
+    return text(db.query_one('select version()')['version'])
 
 if __name__ == '__main__':
     # Bind to PORT if defined, otherwise default to 5000.
