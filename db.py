@@ -21,37 +21,6 @@ def connect(url=None,min=1,max=5):
                                                      host=params.hostname,
                                                      port=params.port)
     
-class cursor(object):
-    def __init__(self,hstore=True):
-        self.hstore = hstore
-        if not _pool:
-            raise ValueError("No database pool")
-    def __enter__(self):
-        self.connection = _pool.getconn()
-        if self.hstore:
-            psycopg2.extras.register_hstore(self.connection)
-        self.cursor = self.connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        return self.cursor
-    def __exit__(self,type,value,traceback):
-        self.connection.commit()
-        self.cursor.close()
-        _pool.putconn(self.connection)
-
-def execute(sql,params=None):
-    with cursor() as c:
-        c.execute(sql,params)
-        return c.rowcount
-
-def query(sql,params=None):
-    with cursor() as c:
-        c.execute(sql,params)
-        return c.fetchall()
-
-def query_one(sql,params=None):
-    with cursor() as c:
-        c.execute(sql,params)
-        return c.fetchone()
-
 _operators = { 'lt':'<', 'gt':'>', 'in':'in', 'ne':'!=', 'like':'like' }
 
 def _where(where):
@@ -92,61 +61,144 @@ def _limit(limit):
     else:
         return ''
 
+class cursor(object):
+
+    def __init__(self,hstore=True):
+        self.hstore = hstore
+        if not _pool:
+            raise ValueError("No database pool")
+
+    def __enter__(self):
+        self.connection = _pool.getconn()
+        if self.hstore:
+            psycopg2.extras.register_hstore(self.connection)
+        self.cursor = self.connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        return self
+
+    def __exit__(self,type,value,traceback):
+        self.commit()
+        self.cursor.close()
+        _pool.putconn(self.connection)
+
+    def commit(self):
+        self.connection.commit()
+
+    def rollback(self):
+        self.connection.rollback()
+
+    def execute(self,sql,params=None):
+        self.cursor.execute(sql,params)
+        return self.cursor.rowcount
+
+    def query(self,sql,params=None):
+        self.cursor.execute(sql,params)
+        return self.cursor.fetchall()
+
+    def query_one(self,sql,params=None):
+        self.cursor.execute(sql,params)
+        return self.cursor.fetchone()
+
+    def query_dict(self,sql,key,params=None):
+        _d = {}
+        for row in self.query(sql,params):
+            _d[row[key]] = row
+        return _d
+
+    def select(self,table,where=None,order=None,columns=None,limit=None):
+        sql = 'SELECT %s FROM %s' % (_columns(columns),table) + _where(where) + _order(order) + _limit(limit)
+        return self.query(sql,where)
+
+    def select_one(self,table,where=None,order=None,columns=None,limit=None):
+        sql = 'SELECT %s FROM %s' % (_columns(columns),table) + _where(where) + _order(order) + _limit(limit)
+        return self.query_one(sql,where)
+
+    def select_dict(self,table,key,where=None,order=None,columns=None,limit=None):
+        sql = 'SELECT %s FROM %s' % (_columns(columns),table) + _where(where) + _order(order) + _limit(limit)
+        return self.query_dict(sql,key,where)
+
+    def join(self,t1,t2,where=None,on=None,order=None,columns=None,limit=None):
+        sql = 'select %s from %s join %s on (%s)' % (_columns(columns),t1,t2,_on((t1,t2),on)) \
+                                + _where(where) + _order(order) + _limit(limit)
+        return self.query(sql,where)
+
+    def join_one(self,t1,t2,where=None,on=None,order=None,columns=None,limit=None):
+        sql = 'select %s from %s join %s on (%s)' % (_columns(columns),t1,t2,_on((t1,t2),on)) \
+                                + _where(where) + _order(order) + _limit(limit)
+        return self.query_one(sql,where)
+
+    def join_dict(self,t1,t2,key,where=None,on=None,order=None,columns=None,limit=None):
+        sql = 'select %s from %s join %s on (%s)' % (_columns(columns),t1,t2,_on((t1,t2),on)) \
+                                + _where(where) + _order(order) + _limit(limit)
+        return self.query_dict(sql,key,where)
+
+    def insert(self,table,values):
+        _values = [ '%%(%s)s' % v for v in values.keys() ]
+        sql = 'INSERT INTO %s (%s) VALUES (%s)' % (table,','.join(values.keys()),','.join(_values))
+        return self.execute(sql,values)
+
+    def delete(self,table,where=None):
+        sql = 'DELETE FROM %s' % table + _where(where)
+        return self.execute(sql,where)
+
+    def update(self,table,values,where=None):
+        sql = 'UPDATE %s SET %s' % (table,','.join(['%s = %%(%s)s' % (v,v) for v in values.keys()]))
+        sql = self.cursor.mogrify(sql,values)
+        if where:
+            sql += self.cursor.mogrify(_where(where),where)
+        return self.execute(sql)
+
+def execute(sql,params=None):
+    with cursor() as c:
+        return c.execute(sql,params)
+
+def query(sql,params=None):
+    with cursor() as c:
+        return c.query(sql,params)
+
+def query_one(sql,params=None):
+    with cursor() as c:
+        return c.query_one(sql,params)
+
 def select(table,where=None,order=None,columns=None,limit=None):
-    sql = 'SELECT %s FROM %s' % (_columns(columns),table) + _where(where) + _order(order) + _limit(limit)
-    return query(sql,where)
-        
+    with cursor() as c:
+        return c.select(table,where,order,columns,limit)
+
 def select_one(table,where=None,order=None,columns=None,limit=None):
-    sql = 'SELECT %s FROM %s' % (_columns(columns),table) + _where(where) + _order(order) + _limit(limit)
-    return query_one(sql,where)
+    with cursor() as c:
+        return c.select_one(table,where,order,columns,limit)
 
 def select_dict(table,key,where=None,order=None,columns=None,limit=None):
-    _d = {}
-    for row in select(table,where,order,columns,limit):
-        _d[row[key]] = row
-    return _d
+    with cursor() as c:
+        return c.select_dict(table,key,where,order,columns,limit)
 
 def join(t1,t2,where=None,on=None,order=None,columns=None,limit=None):
-    sql = 'select %s from %s join %s on (%s)' % (_columns(columns),t1,t2,_on((t1,t2),on)) + _where(where) + _order(order) + _limit(limit)
-    return query(sql,where)
+    with cursor() as c:
+        return c.join(t1,t2,where,on,order,columns,limit)
 
 def join_one(t1,t2,where=None,on=None,order=None,columns=None,limit=None):
-    sql = 'select %s from %s join %s on (%s)' % (_columns(columns),t1,t2,_on((t1,t2),on)) + _where(where) + _order(order) + _limit(limit)
-    return query_one(sql,where)
+    with cursor() as c:
+        return c.join_one(t1,t2,where,on,order,columns,limit)
 
 def join_dict(t1,t2,key,where=None,on=None,order=None,columns=None,limit=None):
-    _d = {}
-    for row in join(t1,t2,where,on,order,columns,limit):
-        _d[row[key]] = row
-    return _d
+    with cursor() as c:
+        return c.join_dict(t1,t2,key,where,on,order,columns,limit)
 
 def insert(table,values):
-    _values = [ '%%(%s)s' % v for v in values.keys() ]
-    sql = 'INSERT INTO %s (%s) VALUES (%s)' % (table,','.join(values.keys()),','.join(_values))
     with cursor() as c:
-        c.execute(sql,values)
-        return c.rowcount
+        return c.insert(table,values)
 
 def delete(table,where=None):
-    sql = 'DELETE FROM %s' % table + _where(where)
     with cursor() as c:
-        c.execute(sql,where)
-        return c.rowcount
+        return c.delete(table,where)
 
 def update(table,values,where=None):
-    sql = 'UPDATE %s SET %s' % (table,','.join(['%s = %%(%s)s' % (v,v) for v in values.keys()]))
     with cursor() as c:
-        sql = c.mogrify(sql,values)
-        if where:
-            sql += c.mogrify(_where(where),where)
-        c.execute(sql)
-        return c.rowcount
+        return c.update(table,values,where)
 
 def check_table(t):
     with cursor() as c:
-        c.execute('SELECT tablename FROM pg_tables WHERE schemaname=%s and tablename=%s',
-                                             ('public',t));
-        return c.fetchone() is not None
+        _sql = 'SELECT tablename FROM pg_tables WHERE schemaname=%s and tablename=%s'
+        return c.query_one(_sql,('public',t)) is not None
 
 def drop_table(t):
     with cursor() as c:
