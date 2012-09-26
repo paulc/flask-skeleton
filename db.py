@@ -1,19 +1,8 @@
 
 """
-    >>> connect('postgres://localhost/')
-    >>> tables = (('doctest_t1','''id SERIAL PRIMARY KEY,
-    ...                            name TEXT NOT NULL,
-    ...                            active BOOLEAN NOT NULL DEFAULT true,
-    ...                            properties HSTORE NOT NULL DEFAULT ''::hstore'''),
-    ...           ('doctest_t2','''id SERIAL PRIMARY KEY,
-    ...                            value TEXT NOT NULL,
-    ...                            doctest_t1_id INTEGER NOT NULL REFERENCES doctest_t1(id)'''),
-    ...          )
-    >>> for name,_ in tables:
-    ...     drop_table(name)
-    >>> init_db(tables)
-    >>> for i in range(10):
-    ...     _ = insert('doctest_t1',{'name':chr(97+i)*5,'properties':{'key':str(i)}})
+
+    Connect to dtabase and create test tables
+
 
 """
 
@@ -178,63 +167,187 @@ class cursor(object):
             return self.execute(sql)
 
 def execute(sql,params=None):
+    """
+        >>> execute("INSERT INTO doctest_t1 (name) VALUES ('xxx')")
+        1
+        >>> execute("DELETE FROM doctest_t1 WHERE name = 'xxx'")
+        1
+    """
     with cursor() as c:
         return c.execute(sql,params)
 
 def query(sql,params=None):
+    """
+        >>> r = query('select name,active,properties FROM doctest_t1 ORDER BY name')
+        >>> r[0] == {'name':'aaaaa','active':True,'properties':{'key':'0'}}
+        True
+        >>> len(r)
+        10
+    """
     with cursor() as c:
         return c.query(sql,params)
 
 def query_one(sql,params=None):
+    """
+        >>> r = query_one('select name,active,properties FROM doctest_t1 WHERE name = %s',('aaaaa',))
+        >>> r == {'name':'aaaaa','active':True,'properties':{'key':'0'}}
+        True
+    """
     with cursor() as c:
         return c.query_one(sql,params)
 
+def query_dict(sql,key,params=None):
+    """
+        >>> r = query_dict('select name,active,properties FROM doctest_t1 ORDER BY name','name')
+        >>> r['aaaaa'] == {'name':'aaaaa','active':True,'properties':{'key':'0'}}
+        True
+        >>> sorted(r.keys())
+        ['aaaaa', 'bbbbb', 'ccccc', 'ddddd', 'eeeee', 'fffff', 'ggggg', 'hhhhh', 'iiiii', 'jjjjj']
+    """
+    with cursor() as c:
+        return c.query_dict(sql,key,params)
+
 def select(table,where=None,order=None,columns=None,limit=None):
+    """
+        >>> select('doctest_t1') == query('SELECT * FROM doctest_t1')
+        True
+        >>> select('doctest_t1',columns=('name','properties'),order=('name',),limit=2)
+        [{'name': 'aaaaa', 'properties': {'key': '0'}}, {'name': 'bbbbb', 'properties': {'key': '1'}}]
+        >>> select('doctest_t1',where={'name__in':('aaaaa','bbbbb')},order=('name__desc',)) == \
+                query("SELECT * FROM doctest_t1 WHERE name IN ('aaaaa','bbbbb') ORDER BY name DESC")
+        True
+        >>> select('doctest_t1',where={'properties__@>':{'key': '1'}})
+        [{'active': True, 'properties': {'key': '1'}, 'id': 2, 'name': 'bbbbb'}]
+        >>> r = select('doctest_t1',columns=(("properties->'key'","key"),),order=("properties->'key'__desc",))
+        >>> [ x['key'] for x in r ]
+        ['9', '8', '7', '6', '5', '4', '3', '2', '1', '0']
+    """
     with cursor() as c:
         return c.select(table,where,order,columns,limit)
 
 def select_one(table,where=None,order=None,columns=None,limit=None):
+    """
+        >>> select_one('doctest_t1',order=('name',),columns=('name',))
+        {'name': 'aaaaa'}
+        >>> select_one('doctest_t1',order=('name',),columns=(('name','_name'),))
+        {'_name': 'aaaaa'}
+    """
     with cursor() as c:
         return c.select_one(table,where,order,columns,limit)
 
 def select_dict(table,key,where=None,order=None,columns=None,limit=None):
+    """
+        >>> select_dict('doctest_t1','name',columns=('name',),order=('name',),limit=2)
+        {'aaaaa': {'name': 'aaaaa'}, 'bbbbb': {'name': 'bbbbb'}}
+    """
     with cursor() as c:
         return c.select_dict(table,key,where,order,columns,limit)
 
 def join(t1,t2,where=None,on=None,order=None,columns=None,limit=None):
+    """
+        >>> join('doctest_t1','doctest_t2',columns=('name','value'),
+        ...             where={'doctest_t1.name__in':('aaaaa','bbbbb','ccccc')},
+        ...             order=('name',),limit=2)
+        [{'name': 'aaaaa', 'value': 'aa'}, {'name': 'bbbbb', 'value': 'bb'}]
+    """
     with cursor() as c:
         return c.join(t1,t2,where,on,order,columns,limit)
 
 def join_one(t1,t2,where=None,on=None,order=None,columns=None,limit=None):
+    """
+        >>> join('doctest_t1','doctest_t2',columns=('name','value'),where={'name':'aaaaa'})
+        [{'name': 'aaaaa', 'value': 'aa'}]
+    """
     with cursor() as c:
         return c.join_one(t1,t2,where,on,order,columns,limit)
 
 def join_dict(t1,t2,key,where=None,on=None,order=None,columns=None,limit=None):
+    """
+        >>> join_dict('doctest_t1','doctest_t2','name',columns=('name','value'),
+        ...             where={'doctest_t1.name__in':('aaaaa','bbbbb','ccccc')},
+        ...             order=('name',),limit=2)
+        {'aaaaa': {'name': 'aaaaa', 'value': 'aa'}, 'bbbbb': {'name': 'bbbbb', 'value': 'bb'}}
+    """
     with cursor() as c:
         return c.join_dict(t1,t2,key,where,on,order,columns,limit)
 
 def insert(table,values,returning=None):
+    """
+        >>> insert('doctest_t1',{'name':'xxx','properties':{'a':'aa'}})
+        1
+        >>> insert('doctest_t1',{'name':'yyy','properties':{'a':'bb'}},'name')
+        {'name': 'yyy'}
+        >>> insert('doctest_t1',values={'name':'zzz','properties':{'a':'cc'}},returning='name')
+        {'name': 'zzz'}
+        >>> select('doctest_t1',where={'properties__?':'a'},order=('name',),columns=('properties',))
+        [{'properties': {'a': 'aa'}}, {'properties': {'a': 'bb'}}, {'properties': {'a': 'cc'}}]
+        >>> delete('doctest_t1',where={'name__in':('xxx','yyy','zzz')})
+        3
+    """
     with cursor() as c:
         return c.insert(table,values,returning)
 
 def delete(table,where=None,returning=None):
+    """
+        >>> insert('doctest_t1',{'name':'xxx'})
+        1
+        >>> insert('doctest_t1',{'name':'xxx'})
+        1
+        >>> delete('doctest_t1',where={'name':'xxx'},returning='name')
+        [{'name': 'xxx'}, {'name': 'xxx'}]
+    """
     with cursor() as c:
         return c.delete(table,where,returning)
 
 def update(table,values,where=None,returning=None):
+    """
+        >>> insert('doctest_t1',{'name':'xxx'})
+        1
+        >>> update('doctest_t1',{'name':'yyy','active':False},{'name':'xxx'})
+        1
+        >>> update('doctest_t1',values={'properties':{'x':'1','y':'2','z':'3'}},where={'name':'yyy'},returning='name')
+        [{'name': 'yyy'}]
+        >>> select_one('doctest_t1',where={'name':'yyy'},columns=('properties',))['properties'] == \
+                {'x':'1','y':'2','z':'3'}
+        True
+        >>> delete('doctest_t1',{'name':'yyy'})
+        1
+    """
     with cursor() as c:
         return c.update(table,values,where,returning)
 
 def check_table(t):
+    """
+        >>> check_table('doctest_t1')
+        True
+        >>> check_table('nonexistent')
+        False
+    """
     with cursor() as c:
         _sql = 'SELECT tablename FROM pg_tables WHERE schemaname=%s and tablename=%s'
         return c.query_one(_sql,('public',t)) is not None
 
 def drop_table(t):
+    """
+        >>> create_table('doctest_t3','''id SERIAL PRIMARY KEY, name TEXT''')
+        >>> check_table('doctest_t3')
+        True
+        >>> drop_table('doctest_t3');
+        >>> check_table('doctest_t3')
+        False
+    """
     with cursor() as c:
         c.execute('DROP TABLE IF EXISTS %s CASCADE' % t)
 
 def create_table(name,schema):
+    """
+        >>> create_table('doctest_t3','''id SERIAL PRIMARY KEY, name TEXT''')
+        >>> check_table('doctest_t3')
+        True
+        >>> drop_table('doctest_t3');
+        >>> check_table('doctest_t3')
+        False
+    """
     if not check_table(name):
         with cursor() as c:
             c.execute('CREATE TABLE %s (%s)' % (name,schema))
@@ -245,9 +358,30 @@ def init_db(tables):
 
 if __name__ == '__main__':
     import code,doctest,sys
-    if sys.argv.count('--test'):
+    if sys.argv.count('--doctest'):
+        tables = (('doctest_t1','''id SERIAL PRIMARY KEY,
+                                   name TEXT NOT NULL,
+                                   active BOOLEAN NOT NULL DEFAULT true,
+                                   properties HSTORE NOT NULL DEFAULT ''::hstore'''),
+                  ('doctest_t2','''id SERIAL PRIMARY KEY,
+                                   value TEXT NOT NULL,
+                                   doctest_t1_id INTEGER NOT NULL REFERENCES doctest_t1(id)'''),
+                 )
+        # Connect to database and create test tables
+        connect('postgres://localhost/')
+        drop_table('doctest_t1')
+        drop_table('doctest_t2')
+        init_db(tables)
+        for i in range(10):
+            id = insert('doctest_t1',{'name':chr(97+i)*5,'properties':{'key':str(i)}},returning='id')['id']
+            _ = insert('doctest_t2',{'value':chr(97+i)*2,'doctest_t1_id':id})
+        # Run tests
         doctest.testmod(optionflags=doctest.ELLIPSIS)
+        # Drop tables
+        drop_table('doctest_t1')
+        drop_table('doctest_t2')
     else:
+        # Run interactive shell
         connect()
         code.interact(local=locals())
 
