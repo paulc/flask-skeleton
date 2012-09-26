@@ -1,11 +1,4 @@
 
-"""
-
-    Connect to dtabase and create test tables
-
-
-"""
-
 import os,urlparse
 import psycopg2,psycopg2.extras,psycopg2.pool
 
@@ -28,7 +21,7 @@ def connect(url=None,min=1,max=5):
                                                      host=params.hostname,
                                                      port=params.port)
     
-_operators = { 'lt':'<', 'gt':'>', 'in':'in', 'ne':'!=', 'like':'like' }
+_operators = { 'lt':'<', 'gt':'>', 'ne':'!=' }
 
 def _where(where):
     if where: 
@@ -70,8 +63,9 @@ def _limit(limit):
 
 class cursor(object):
 
-    def __init__(self,hstore=True):
+    def __init__(self,hstore=True,cursor_factory=psycopg2.extras.RealDictCursor):
         self.hstore = hstore
+        self.cursor_factory = cursor_factory
         if not _pool:
             raise ValueError("No database pool")
 
@@ -79,7 +73,7 @@ class cursor(object):
         self.connection = _pool.getconn()
         if self.hstore:
             psycopg2.extras.register_hstore(self.connection)
-        self.cursor = self.connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        self.cursor = self.connection.cursor(cursor_factory=self.cursor_factory)
         return self
 
     def __exit__(self,type,value,traceback):
