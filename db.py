@@ -24,7 +24,7 @@ def connect(url=None,min=1,max=5):
 _operators = { 'lt':'<', 'gt':'>', 'ne':'!=' }
 _update_operators = { ''    : "%(field)s = %%(%(key)s)s",
                       'add' : "%(field)s = %(field)s + %%(%(key)s)s",
-                      'sub' : "%(field)s = %(field)s + %%(%(key)s)s",
+                      'sub' : "%(field)s = %(field)s - %%(%(key)s)s",
                       'func' : "%(field)s = %(val)s",
                     }
 
@@ -219,8 +219,8 @@ def select(table,where=None,order=None,columns=None,limit=None):
         >>> select('doctest_t1',where={'name__in':('aaaaa','bbbbb')},order=('name__desc',)) == \
                 query("SELECT * FROM doctest_t1 WHERE name IN ('aaaaa','bbbbb') ORDER BY name DESC")
         True
-        >>> select('doctest_t1',where={'properties__@>':{'key': '1'}})
-        [{'active': True, 'properties': {'key': '1'}, 'id': 2, 'name': 'bbbbb'}]
+        >>> select_one('doctest_t1',columns=('name',),where={'properties__@>':{'key': '1'}})
+        {'name': 'bbbbb'}
         >>> r = select('doctest_t1',columns=(("properties->'key'","key"),),order=("properties->'key'__desc",))
         >>> [ x['key'] for x in r ]
         ['9', '8', '7', '6', '5', '4', '3', '2', '1', '0']
@@ -308,6 +308,14 @@ def update(table,values,where=None,returning=None):
         1
         >>> update('doctest_t1',{'name':'yyy','active':False},{'name':'xxx'})
         1
+        >>> update('doctest_t1',values={'count__add':1},where={'name':'yyy'},returning='count')
+        [{'count': 1}]
+        >>> update('doctest_t1',values={'count__add':1},where={'name':'yyy'},returning='count')
+        [{'count': 2}]
+        >>> update('doctest_t1',values={'count__func':'floor(pi()*count)'},where={'name':'yyy'},returning='count')
+        [{'count': 6}]
+        >>> update('doctest_t1',values={'count__sub':6},where={'name':'yyy'},returning='count')
+        [{'count': 0}]
         >>> update('doctest_t1',values={'properties':{'x':'1','y':'2','z':'3'}},where={'name':'yyy'},returning='name')
         [{'name': 'yyy'}]
         >>> select_one('doctest_t1',where={'name':'yyy'},columns=('properties',))['properties'] == \
@@ -364,6 +372,7 @@ if __name__ == '__main__':
     if sys.argv.count('--doctest'):
         tables = (('doctest_t1','''id SERIAL PRIMARY KEY,
                                    name TEXT NOT NULL,
+                                   count INTEGER NOT NULL DEFAULT 0,
                                    active BOOLEAN NOT NULL DEFAULT true,
                                    properties HSTORE NOT NULL DEFAULT ''::hstore'''),
                   ('doctest_t2','''id SERIAL PRIMARY KEY,
