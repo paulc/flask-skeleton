@@ -22,6 +22,11 @@ def connect(url=None,min=1,max=5):
                                                      port=params.port)
     
 _operators = { 'lt':'<', 'gt':'>', 'ne':'!=' }
+_update_operators = { ''    : "%(field)s = %%(%(key)s)s",
+                      'add' : "%(field)s = %(field)s + %%(%(key)s)s",
+                      'sub' : "%(field)s = %(field)s + %%(%(key)s)s",
+                      'func' : "%(field)s = %(val)s",
+                    }
 
 def _where(where):
     if where: 
@@ -150,7 +155,11 @@ class cursor(object):
             return self.execute(sql,where)
 
     def update(self,table,values,where=None,returning=None):
-        sql = 'UPDATE %s SET %s' % (table,','.join(['%s = %%(%s)s' % (v,v) for v in values.keys()]))
+        _update = []
+        for k,v in values.items():
+            f,_,op = k.partition('__')
+            _update.append(_update_operators[op] % {'key':k,'val':v,'field':f,'op':op})
+        sql = 'UPDATE %s SET %s' % (table,','.join(_update))
         sql = self.cursor.mogrify(sql,values)
         if where:
             sql += self.cursor.mogrify(_where(where),where)
