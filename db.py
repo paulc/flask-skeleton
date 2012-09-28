@@ -21,11 +21,18 @@ def connect(url=None,min=1,max=5):
                                                      host=params.hostname,
                                                      port=params.port)
     
-_operators = { 'lt':'<', 'gt':'>', 'ne':'!=' }
-_update_operators = { ''    : "%(field)s = %%(%(key)s)s",
-                      'add' : "%(field)s = %(field)s + %%(%(key)s)s",
-                      'sub' : "%(field)s = %(field)s - %%(%(key)s)s",
-                      'func' : "%(field)s = %(val)s",
+_operators = { 'lt'     : '<', 
+               'gt'     : '>', 
+               'ne'     : '!=',
+               're'     : '~',
+               'like'   : 'LIKE',
+               'not_like': 'NOT LIKE',
+              }
+_update_operators = { ''        : "%(field)s = %%(%(key)s)s",
+                      'add'     : "%(field)s = %(field)s + %%(%(key)s)s",
+                      'sub'     : "%(field)s = %(field)s - %%(%(key)s)s",
+                      'append'  : "%(field)s = %(field)s || %%(%(key)s)s",
+                      'func'    : "%(field)s = %(val)s",
                     }
 
 def _where(where):
