@@ -1,13 +1,16 @@
 
 import os,sys
+import psycopg2,psycopg2.extras
+
 from flask import Flask,current_app,abort,flash,g,redirect,request,render_template, \
                   session,url_for
 from flask.ext.login import LoginManager,login_required,login_user,logout_user, \
                             fresh_login_required,confirm_login,current_user
-import psycopg2,psycopg2.extras
-from urlparse import urlparse
+from flask_mail import Mail,Message,email_dispatched
 
 import db
+from gmail import GMail
+
 from user import User
 from forms import LoginForm
 from admin import admin_required
@@ -15,10 +18,16 @@ from admin import admin_required
 # Config
 DEBUG = os.environ.get('DEBUG',False)
 SECRET_KEY = os.urandom(32)
+MAIL_USERNAME = 'paul.chakravarti@gmail.com'
+MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
+MAIL_FAIL_SILENTLY = False
+DEFAULT_MAIL_SENDER = ('Paul Chakravarti', 'paul.chakravarti@gmail.com')
 
 # Create App
 app = Flask(__name__)
 app.config.from_object(__name__)
+
+gmail = GMail(app)
 
 # Database connection
 TABLES = (
@@ -53,6 +62,13 @@ def text(msg,code=200):
 @app.route('/')
 def index():
     return render_template("index.html",message="Hello",user=current_user)
+
+@app.route('/msg/<to>/<subject>/<text>')
+def msg(to,subject,text):
+    msg = Message(subject,recipients=[to])
+    msg.body = text
+    gmail.send(msg)
+    return "Sent Message"
 
 @app.route('/login',methods=('GET','POST',))
 def login():
