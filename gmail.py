@@ -1,4 +1,6 @@
 
+import logging,multiprocessing
+
 from flask_mail import Mail,Message,email_dispatched
 
 class GMail(Mail):
@@ -32,6 +34,33 @@ class GMail(Mail):
         if listener:
             email_dispatched.connect(listener)
 
+    def bg_send(self,msg):
+        p = multiprocessing.Process(target=self.send, args=(msg,))
+        p.start()
+        return p.pid
+
+class GMmailHandler(logging.Handler):
+
+    def __init__(self,username,password,toaddr,subject):
+        logging.Handler.__init__(self)
+        self.gmail= GMail(username=username,password=password)
+        self.sender = username
+        self.toaddr = toaddr
+        self.subject = subject
+
+    def getSubject(self, record):
+        return self.subject
+
+    def emit(self,record):
+        try:
+            msg = Message(self.getSubject(record),sender=self.sender,recipients=self.toaddr)
+            msg.body = record.levelname + " " + self.format(record)
+            self.gmail.bg_send(msg)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except:
+            self.handleError(record)
+        
 if __name__ == '__main__':
     import argparse,getpass,mimetypes,sys
 

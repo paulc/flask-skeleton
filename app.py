@@ -1,5 +1,5 @@
 
-import os,sys
+import multiprocessing,os,sys
 import psycopg2,psycopg2.extras
 
 from flask import Flask,current_app,abort,flash,g,redirect,request,render_template, \
@@ -63,12 +63,12 @@ def text(msg,code=200):
 def index():
     return render_template("index.html",message="Hello",user=current_user)
 
-@app.route('/msg/<to>/<subject>/<text>')
-def msg(to,subject,text):
+@app.route('/msg/<to>/<subject>/<content>')
+def msg(to,subject,content):
     msg = Message(subject,recipients=[to])
-    msg.body = text
-    gmail.send(msg)
-    return "Sent Message"
+    msg.body = content
+    pid = gmail.bg_send(msg)
+    return text("Sent Message: %d" % pid)
 
 @app.route('/login',methods=('GET','POST',))
 def login():
