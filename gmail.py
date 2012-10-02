@@ -1,59 +1,106 @@
 
-import logging,multiprocessing
+import logging
+import multiprocessing
+import os.path
+import smtplib
+import time
 
-from flask_mail import Mail,Message,email_dispatched
+from email.encoders import encode_base64
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.utils import formatdate,make_msgid,getaddresses,parseaddr
+from mimetypes import guess_type
+#from contextlib import contextmanager
 
-class GMail(Mail):
+class GMail(object):
 
-    def __init__(self,app=None,**kwargs):
-        if app is None:
-            self.init_standalone(**kwargs)
-        else:
-            # GMail settings
-            app.config.update(
-                    MAIL_SERVER  = 'smtp.gmail.com',
-                    MAIL_PORT    = 587,
-                    MAIL_USE_TLS = True,
-                    MAIL_USE_SSL = False
-            )
-            self.init_app(app)
-
-    def init_standalone(self,username,password,listener=None,debug=False,fail=False,suppress=False):
-        self.app = None
+    def __init__(self,username,password,debug=False):
         self.server = 'smtp.gmail.com'
-        self.username = username
-        self.password = password
         self.port = 587
-        self.use_tls = True
-        self.use_ssl = False
+        self.username = parseaddr(username)[1]
+        self.password = password
+        self.sender = username
         self.debug = debug
-        self.max_emails = 0
-        self.suppress = suppress
-        self.fail_silently = fail
 
-        if listener:
-            email_dispatched.connect(listener)
+    def connect(self):
+        self.session = smtplib.SMTP(self.server,self.port)
+        self.session.set_debuglevel(self.debug)
+        self.session.ehlo()
+        self.session.starttls()
+        self.session.ehlo()
+        self.session.login(self.username,self.password)
 
-    def bg_send(self,msg):
-        p = multiprocessing.Process(target=self.send, args=(msg,))
-        p.start()
-        return p.pid
+    def close(self):
+        self.session.quit()
+
+    def send(self,message,rcpt=None):
+        ## TODO Check connection active
+        if rcpt is None:
+            rcpt = [ addr[1] for addr in getaddresses((message.get_all('To') or []) + 
+                                                      (message.get_all('Cc') or []) + 
+                                                      (message.get_all('Bcc') or [])) ]
+        if message['From'] is None:
+            message['From'] = self.sender
+        if message['Reply-To'] is None:
+            message['Reply-To'] = self.sender
+        del message['Bcc']
+        self.session.sendmail(self.sender,rcpt,message.as_string())
+
+def message(subject,to,cc=None,bcc=None,text=None,html=None,attachments=None):
+    parts = []
+    _text = MIMEText(text,'plain','utf-8' if isinstance(text,unicode) else 'us-ascii')
+    _html = MIMEText(html,'html','utf-8' if isinstance(html,unicode) else 'us-ascii')
+    if html:
+        alt = MIMEMultipart('alternative')
+        alt.attach(_text)
+        alt.attach(_html)
+        parts.append(alt)
+    else:
+        parts.append(_text)
+    for a in attachments or []:
+        if isinstance(a,MIMEBase):
+            parts.append(a)
+        else:
+            main,sub = (guess_type(a) or ('application/octet-stream',''))[0].split('/',1)
+            attachment = MIMEBase(main,sub)
+            attachment.set_payload(file(a).read())
+            attachment.add_header('Content-Disposition','attachment',filename=os.path.basename(a))
+            encode_base64(attachment)
+            parts.append(attachment)
+    if len(parts) == 0:
+        raise ValueError('Empty Message') 
+    elif len(parts) == 1:
+        msg = parts[0]
+    else:
+        msg = MIMEMultipart()
+        for part in parts:
+            msg.attach(part)
+    msg['To'] = to
+    if cc: msg['Cc'] = cc
+    if bcc: msg['Bcc'] = bcc
+    msg['Subject'] = subject
+    msg['Date'] = formatdate(time.time(),localtime=True)
+    msg['Msg-Id'] = make_msgid()
+    return msg
 
 class GMmailHandler(logging.Handler):
 
-    def __init__(self,username,password,toaddr,subject):
+    def __init__(self,username,password,to,subject):
         logging.Handler.__init__(self)
         self.gmail= GMail(username=username,password=password)
-        self.sender = username
-        self.toaddr = toaddr
+        self.to = to
         self.subject = subject
 
     def getSubject(self, record):
-        return self.subject
+        return record.levelname + " " + self.subject
+
+    def getText(self,record):
+        return str(record)
 
     def emit(self,record):
         try:
-            msg = Message(self.getSubject(record),sender=self.sender,recipients=self.toaddr)
+            msg = message(self.getSubject(record),to=self.toaddr,text=self.getText(record))
             msg.body = record.levelname + " " + self.format(record)
             self.gmail.bg_send(msg)
         except (KeyboardInterrupt, SystemExit):
@@ -68,9 +115,7 @@ if __name__ == '__main__':
     parser.add_argument('--username','-u',required=True,
                                 help='GMail Username')
     parser.add_argument('--password','-p',default=None,
-                                help='GMail Username')
-    parser.add_argument('--from','-f',dest='_from',
-                                help='From (default: username)')
+                                help='GMail Password')
     parser.add_argument('--to','-t',required=True,action='append',default=[],
                                 help='Recipient (multiple allowed)')
     parser.add_argument('--subject','-s',required=True,
@@ -89,22 +134,17 @@ if __name__ == '__main__':
     if results.password is None:
         results.password = getpass.getpass("Password:")
 
-    if results._from is None:
-        results._from = results.username
-
     if results.body is None and results.html is None:
         results.body = sys.stdin.read()
 
-    server = GMail(username=results.username,
-                   password=results.password,
-                   debug=results.debug)
-    msg = Message(subject=results.subject,
-                  recipients=results.to,
-                  body=results.body,
+    gmail = GMail(username=results.username,
+                  password=results.password,
+                  debug=results.debug)
+    msg = message(subject=results.subject,
+                  to=",".join(results.to),
+                  text=results.body,
                   html=results.html,
-                  sender=results._from)
-    for f in results.attachment:
-        msg.attach(filename=f,
-                   content_type=mimetypes.guess_type(f)[0] or 'application/octet-stream',
-                   data=file(f).read())
-    server.send(msg)
+                  attachments=results.attachment)
+    gmail.connect()
+    gmail.send(msg)
+    gmail.close()
