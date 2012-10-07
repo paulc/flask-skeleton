@@ -33,9 +33,6 @@ class GMail(object):
         self.session.ehlo()
         self.session.login(self.username,self.password)
 
-    def close(self):
-        self.session.quit()
-
     def send(self,message,rcpt=None):
         if not self.is_connected():
             self.connect()
@@ -69,6 +66,13 @@ class GMail(object):
             self.session = None
             return False
             
+    def close(self):
+        if self.session:
+            self.session.quit()
+
+    def __del__(self):
+        self.close()
+
 class GMailWorker(object):
 
     def __init__(self,username,password,debug=False):
