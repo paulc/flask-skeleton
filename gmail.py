@@ -1,6 +1,7 @@
 
 import logging
 import multiprocessing
+import multiprocessing.queues
 import os.path
 import smtplib
 import time
@@ -11,7 +12,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formatdate,make_msgid,getaddresses,parseaddr
 from mimetypes import guess_type
-#from contextlib import contextmanager
+from smtplib import SMTPResponseException,SMTPServerDisconnected
 
 class GMail(object):
 
@@ -22,6 +23,7 @@ class GMail(object):
         self.password = password
         self.sender = username
         self.debug = debug
+        self.session = None
 
     def connect(self):
         self.session = smtplib.SMTP(self.server,self.port)
@@ -35,7 +37,8 @@ class GMail(object):
         self.session.quit()
 
     def send(self,message,rcpt=None):
-        ## TODO Check connection active
+        if not self.is_connected():
+            self.connect()
         if rcpt is None:
             rcpt = [ addr[1] for addr in getaddresses((message.get_all('To') or []) + 
                                                       (message.get_all('Cc') or []) + 
@@ -44,8 +47,60 @@ class GMail(object):
             message['From'] = self.sender
         if message['Reply-To'] is None:
             message['Reply-To'] = self.sender
+        if message['Date'] is None:
+            message['Date'] = formatdate(time.time(),localtime=True)
+        if message['Message-ID'] is None:
+            message['Message-ID'] = make_msgid()
         del message['Bcc']
+
         self.session.sendmail(self.sender,rcpt,message.as_string())
+
+    def is_connected(self):
+        if self.session is None:
+            return False
+        try:
+            rcode,msg = self.session.noop()
+            if rcode == 250:
+                return True
+            else:
+                self.session = None
+                return False
+        except (SMTPServerDisconnected,SMTPResponseException):
+            self.session = None
+            return False
+            
+class GMailWorker(object):
+
+    def __init__(self,username,password,debug=False):
+        def _gmail_worker(username,password,queue,debug=False):
+            gmail = GMail(username,password,debug)
+            gmail.connect()
+            while True:
+                try:
+                    msg,rcpt = queue.get()
+                    if msg == 'QUIT':
+                        break
+                    gmail.send(msg,rcpt)
+                except SMTPServerDisconnected:
+                    gmail.connect()
+                    gmail.send(msg,rcpt)
+                except SMTPResponseException:
+                    pass
+                except KeyboardInterrupt:
+                    break
+            gmail.close()
+        self.queue = multiprocessing.queues.SimpleQueue()
+        self.worker = multiprocessing.Process(target=_gmail_worker,args=(username,password,self.queue,debug))
+        self.worker.start()
+
+    def send(self,message,rcpt=None):
+        self.queue.put((message,rcpt))
+
+    def quit(self):
+        self.queue.put(('QUIT',None))
+
+    def __del__(self):
+        self.quit()
 
 def message(subject,to,cc=None,bcc=None,text=None,html=None,attachments=None):
     parts = []
@@ -80,8 +135,6 @@ def message(subject,to,cc=None,bcc=None,text=None,html=None,attachments=None):
     if cc: msg['Cc'] = cc
     if bcc: msg['Bcc'] = bcc
     msg['Subject'] = subject
-    msg['Date'] = formatdate(time.time(),localtime=True)
-    msg['Msg-Id'] = make_msgid()
     return msg
 
 class GMmailHandler(logging.Handler):
@@ -146,5 +199,5 @@ if __name__ == '__main__':
                   html=results.html,
                   attachments=results.attachment)
     gmail.connect()
-    gmail.send(msg)
+    print gmail.send(msg)
     gmail.close()
