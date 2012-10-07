@@ -139,9 +139,12 @@ def message(subject,to,cc=None,bcc=None,text=None,html=None,attachments=None):
 
 class GMmailHandler(logging.Handler):
 
-    def __init__(self,username,password,to,subject):
+    def __init__(self,username,password,to,subject,bg=False):
         logging.Handler.__init__(self)
-        self.gmail= GMail(username=username,password=password)
+        if bg:
+            self.gmail= GMailWorker(username,password)
+        else:
+            self.gmail= GMail(username,password)
         self.to = to
         self.subject = subject
 
@@ -155,7 +158,7 @@ class GMmailHandler(logging.Handler):
         try:
             msg = message(self.getSubject(record),to=self.toaddr,text=self.getText(record))
             msg.body = record.levelname + " " + self.format(record)
-            self.gmail.bg_send(msg)
+            self.gmail.send(msg)
         except (KeyboardInterrupt, SystemExit):
             raise
         except:
